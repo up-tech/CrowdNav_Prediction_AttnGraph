@@ -198,7 +198,7 @@ def get_args():
     # gst pred: 'CrowdSimPredRealGST-v0'
     parser.add_argument(
         '--env-name',
-        default='CrowdSimPredRealGST-v0',
+        default='CrowdSimAlpha-v0',
         help='name of the environment')
 
 

@@ -164,7 +164,7 @@ def main():
 					rollouts.masks[step])
 
 			# if we use real prediction, send predictions to env for rendering
-			if env_name == 'CrowdSimPredRealGST-v0' and env_config.env.use_wrapper:
+			if env_name == 'CrowdSimAlpha' and env_config.env.use_wrapper:
 				# [nenv, max_human_num, 2*(pred_steps+1)] -> [nenv, max_human_num, 2*pred_steps]
 				out_pred = rollouts_obs['spatial_edges'][:, :, 2:].to('cpu').numpy()
 				# send manager action to all processes
