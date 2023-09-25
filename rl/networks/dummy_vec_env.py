@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from baselines.common.vec_env.vec_env import VecEnv
 from baselines.common.vec_env.util import dict_to_obs, obs_space_info, copy_obs_dict
 
@@ -9,6 +10,8 @@ class DummyVecEnv(VecEnv):
     Useful when debugging and when num_env == 1 (in the latter case,
     avoids communication overhead)
     """
+
+
     def __init__(self, env_fns):
         """
         Arguments:
@@ -56,6 +59,7 @@ class DummyVecEnv(VecEnv):
                 self.buf_infos.copy())
 
     def reset(self):
+        print(f'num envs: {self.num_envs}')
         for e in range(self.num_envs):
             obs = self.envs[e].reset()
             self._save_obs(e, obs)
@@ -69,6 +73,8 @@ class DummyVecEnv(VecEnv):
         return [True]
 
     def _save_obs(self, e, obs):
+        #print(obs)
+        #obs = obs.cpu().numpy()
         for k in self.keys:
             if k is None:
                 self.buf_obs[k][e] = obs

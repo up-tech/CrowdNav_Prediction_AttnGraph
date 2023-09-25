@@ -76,8 +76,8 @@ class DummyVecEnv(VecEnv):
             if k is None:
                 self.buf_obs[k][e] = obs
             else:
-                d[k] = self.buf_obs[k][0]
-                self.buf_obs[k][e] = obs[k]
+                d[k] = self.buf_obs[k][0].cpu()
+                self.buf_obs[k][e] = obs[k] 
         self.obs_list = [dict_to_obs(copy_obs_dict(d))]
 
     def _obs_from_buf(self):

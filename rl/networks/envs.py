@@ -32,6 +32,7 @@ try:
 except ImportError:
     pass
 
+color_print =  '\033[1;32;40m'
 
 def make_env(env_id, seed, rank, log_dir, allow_early_resets, config=None, envNum=1, ax=None, test_case=-1):
     def _thunk():
@@ -103,18 +104,23 @@ def make_vec_envs(env_name,
                   allow_early_resets,
                   num_frame_stack=None,
                   config=None,
-                  ax=None, test_case=-1, wrap_pytorch=True, pretext_wrapper=False):
+                  ax=None, test_case=-1, wrap_pytorch=False, pretext_wrapper=False):
     envs = [
         make_env(env_name, seed, i, log_dir, allow_early_resets, config=config,
                  envNum=num_processes, ax=ax, test_case=test_case)
         for i in range(num_processes)
     ]
+    print(color_print + 'Initilize gym env done')
     test = False if len(envs) > 1 else True
 
     if len(envs) > 1:
+        print(color_print + 'ShmemVecEnv')
         envs = ShmemVecEnv(envs, context='fork')
     else:
+        #uplc comment: exec when num process = 1 (sim.render = true)
+        print(color_print + 'DummyVecEnv')
         envs = DummyVecEnv(envs)
+
     # for collect data in supervised learning, we don't need to wrap pytorch
     if wrap_pytorch:
         if isinstance(envs.observation_space, Box):
@@ -123,20 +129,23 @@ def make_vec_envs(env_name,
                     envs = VecNormalize(envs, ret=False, ob=False)
                 else:
                     envs = VecNormalize(envs, gamma=gamma, ob=False, ret=False)
-
         envs = VecPyTorch(envs, device)
+
+    #uplc comment: not using pretext wrapper
     if pretext_wrapper:
         if gamma is None:
             envs = VecPretextNormalize(envs, ret=False, ob=False, config=config, test=test)
         else:
             envs = VecPretextNormalize(envs, gamma=gamma, ob=False, ret=False, config=config, test=test)
 
+    #uplc comment: skip this part
     if num_frame_stack is not None:
         envs = VecPyTorchFrameStack(envs, num_frame_stack, device)
     elif isinstance(envs.observation_space, Box):
         if len(envs.observation_space.shape) == 3:
             envs = VecPyTorchFrameStack(envs, 4, device)
-
+    #
+    
     return envs
 
 

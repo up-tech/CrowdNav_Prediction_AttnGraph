@@ -31,6 +31,6 @@ register(
 )
 
 register(
-    id='CrowdSimAlpha-v0',
-    entry_point='crowd_sim.envs:CrowdSimAlpha',
+    id='CrowdSimAllAttn-v0',
+    entry_point='crowd_sim.envs:CrowdSimAllAttn',
 )

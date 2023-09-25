@@ -248,6 +248,7 @@ class CrowdSim(gym.Env):
         :return:
         """
         # keep the order of 5 humans at each timestep
+        print('test test   ~~~~')
         for i in range(self.human_num):
             if human_visibility[i]:
                 humanS = np.array(self.humans[i].get_observable_state_list())
@@ -398,7 +399,6 @@ class CrowdSim(gym.Env):
 
         # case size is used to make sure that the case_counter is always between 0 and case_size[phase]
         self.case_counter[phase] = (self.case_counter[phase] + int(1*self.nenv)) % self.case_size[phase]
-
 
         # get current observation
         ob = self.generate_ob(reset=True)
@@ -660,17 +660,23 @@ class CrowdSim(gym.Env):
         return reward, done, episode_info
 
     # compute the observation
+
+    
     def generate_ob(self, reset):
-        visible_human_states, num_visible_humans, human_visibility = self.get_num_human_in_fov()
-        self.update_last_human_states(human_visibility, reset=reset)
+        #visible_human_states, num_visible_humans, human_visibility = self.get_num_human_in_fov()
+        #self.update_last_human_states(human_visibility, reset=reset)
+        self.update_last_human_states(20, reset=reset)
+        #uplc comment: not using 
         if self.robot.policy.name in ['lstm_ppo', 'srnn']:
-            ob = [num_visible_humans]
+            #ob = [num_visible_humans]
+            ob = [20]
             # append robot's state
             robotS = np.array(self.robot.get_full_state_list())
             ob.extend(list(robotS))
 
             ob.extend(list(np.ravel(self.last_human_states)))
             ob = np.array(ob)
+        #
 
         else: # for orca and sf
             ob = self.last_human_states_obj()

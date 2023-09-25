@@ -145,6 +145,7 @@ class Agent(object):
         if self.kinematics == 'holonomic':
             px = self.px + action.vx * delta_t
             py = self.py + action.vy * delta_t
+            print(f'~~~~~~~~~~~~~~~~~~~~~~ {action.vx}')
         # unicycle
         else:
             # naive dynamics

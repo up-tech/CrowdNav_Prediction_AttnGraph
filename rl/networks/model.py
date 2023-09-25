@@ -5,6 +5,7 @@ import torch.nn as nn
 from rl.networks.distributions import Bernoulli, Categorical, DiagGaussian
 from .srnn_model import SRNN
 from .selfAttn_srnn_temp_node import selfAttn_merge_SRNN
+from .allAttn import All_Attn
 
 class Flatten(nn.Module):
     def forward(self, x):
@@ -22,6 +23,8 @@ class Policy(nn.Module):
             base=SRNN
         elif base == 'selfAttn_merge_srnn':
             base = selfAttn_merge_SRNN
+        elif base == 'allAttn':
+            base = All_Attn
         else:
             raise NotImplementedError
 
@@ -53,14 +56,38 @@ class Policy(nn.Module):
     def forward(self, inputs, rnn_hxs, masks):
         raise NotImplementedError
 
-    def act(self, inputs, rnn_hxs, masks, deterministic=False):
+    # def act(self, inputs, rnn_hxs, masks, deterministic=False):
+    #     if not hasattr(self, 'srnn'):
+    #         self.srnn = False
+    #     if self.srnn:
+    #         value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks, infer=True)
+
+    #     else:
+    #         value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
+    #     dist = self.dist(actor_features)
+
+    #     if deterministic:
+    #         action = dist.mode()
+    #     else:
+    #         action = dist.sample()
+
+    #     action_log_probs = dist.log_probs(action)
+    #     dist_entropy = dist.entropy().mean()
+
+    #     return value, action, action_log_probs, rnn_hxs
+    
+    def act(self, inputs, deterministic=False):
         if not hasattr(self, 'srnn'):
             self.srnn = False
+
         if self.srnn:
-            value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks, infer=True)
+            print('uplc comment srnn = true')
+            value, actor_features = self.base(inputs, infer=True)
 
         else:
-            value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
+            
+            value, actor_features = self.base(inputs)
+
         dist = self.dist(actor_features)
 
         if deterministic:
@@ -71,7 +98,7 @@ class Policy(nn.Module):
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
 
-        return value, action, action_log_probs, rnn_hxs
+        return value, action, action_log_probs
 
     def get_value(self, inputs, rnn_hxs, masks):
 

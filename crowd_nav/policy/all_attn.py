@@ -30,7 +30,6 @@ class SRNN(Policy):
 			if act_norm > v_pref:
 				raw_action[0] = raw_action[0] / act_norm * v_pref
 				raw_action[1] = raw_action[1] / act_norm * v_pref
-			print(ActionXY(raw_action[0], raw_action[1]))
 			return ActionXY(raw_action[0], raw_action[1])
 		else:
 			# for sim2real
@@ -44,11 +43,6 @@ class SRNN(Policy):
 
 			return ActionRot(raw_action[0], raw_action[1])
 
-
-class selfAttn_merge_SRNN(SRNN):
-	def __init__(self, config):
-		super().__init__(config)
-		self.name = 'selfAttn_merge_srnn'
 
 class allAttn(SRNN):
 	def __init__(self, config):
