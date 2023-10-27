@@ -6,9 +6,18 @@ import torch
 def get_args():
     parser = argparse.ArgumentParser(description='RL')
 
+    parser.add_argument(
+        '--approach', type=str, default='plusplus')
+
     # the saving directory for train.py
     parser.add_argument(
-        '--output_dir', type=str, default='trained_models/my_model')
+        '--plusplus_output_dir', type=str, default='trained_models/plusplus_model')
+    
+    parser.add_argument(
+        '--sarl_output_dir', type=str, default='trained_models/sarl_model')
+    
+    parser.add_argument(
+        '--esa_output_dir', type=str, default='trained_models/esa_model')
 
     # resume training from an existing checkpoint or not
     parser.add_argument(
@@ -196,11 +205,11 @@ def get_args():
     # No prediction: for orca, sf, old_srnn, selfAttn_srnn_noPred ablation: 'CrowdSimVarNum-v0',
     # for constant velocity Pred, ground truth Pred: 'CrowdSimPred-v0'
     # gst pred: 'CrowdSimPredRealGST-v0'
+    # sarl: CrowdSimSARL-v0
     parser.add_argument(
         '--env-name',
         default='CrowdSimPredRealGST-v0',
-        help='name of the environment')
-
+        help='name of the plusplus environment')
 
     # sort all humans and squeeze them to the front or not
     parser.add_argument('--sort_humans', type=bool, default=True)
@@ -214,5 +223,7 @@ def get_args():
     if args.recurrent_policy:
         assert args.algo in ['a2c', 'ppo'], \
             'Recurrent policy is not implemented for ACKTR'
+    
+    assert args.approach in ['sarl', 'esa', 'plusplus']
 
     return args
