@@ -126,8 +126,6 @@ def main():
 		eps=algo_args.eps,
 		max_grad_norm=algo_args.max_grad_norm)
 
-
-
 	obs = envs.reset()
 	if isinstance(obs, dict):
 		for key in obs:

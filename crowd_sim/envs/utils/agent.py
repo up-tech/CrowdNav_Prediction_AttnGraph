@@ -35,10 +35,13 @@ class Agent(object):
         self.time_step = config.env.time_step
         self.policy.time_step = config.env.time_step
 
-
     def print_info(self):
         logging.info('Agent is {} and has {} kinematic constraint'.format(
             'visible' if self.visible else 'invisible', self.kinematics))
+    
+    def set_policy(self, policy):
+        self.policy = policy
+        self.kinematics = policy.kinematics
 
 
     def sample_random_attributes(self):

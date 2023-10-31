@@ -7,7 +7,7 @@ def get_args():
     parser = argparse.ArgumentParser(description='RL')
 
     parser.add_argument(
-        '--approach', type=str, default='plusplus')
+        '--approach', type=str, default='sarl')
 
     # the saving directory for train.py
     parser.add_argument(

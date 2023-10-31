@@ -1,225 +1,104 @@
 import gym
 import numpy as np
-import torch
-from numpy.linalg import norm
-from crowd_sim.envs.utils.info import *
-from crowd_sim.envs.utils.human import Human
-from crowd_sim.envs.utils.state import JointState
+
 from crowd_sim.envs.crowd_sim_pred import CrowdSimPred
 
 
 class CrowdSimSARL(CrowdSimPred):
-
+    '''
+    Same as CrowdSimPred, except that
+    The future human traj in 'spatial_edges' are dummy placeholders
+    and will be replaced by the outputs of a real GST pred model in the wrapper function in vec_pretext_normalize.py
+    '''
     def __init__(self):
+        """
+        Movement simulation for n+1 agents
+        Agent can either be human or robot.
+        humans are controlled by a unknown and fixed policy.
+        robot is controlled by a known and learnable policy.
+        """
         super(CrowdSimSARL, self).__init__()
+        self.pred_method = None
+
+        # to receive data from gst pred model
+        self.gst_out_traj = None
 
 
     def set_robot(self, robot):
         """set observation space and action space"""
         self.robot = robot
 
+        # we set the max and min of action/observation space as inf
+        # clip the action and observation as you need
+
         d = {}
-        #d['robot_node'] = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(1, 6,), dtype=np.float32)
-        d['robot_human_node'] = gym.spaces.Box(low=-np.inf, high=np.inf,
-                            shape=(self.config.sim.human_num, 13,)
-                            )
+        # robot node: num_visible_humans, px, py, r, gx, gy, v_pref, theta
+        d['robot_node'] = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(1, 7,), dtype=np.float32)
+        # only consider all temporal edges (human_num+1) and spatial edges pointing to robot (human_num)
+        d['temporal_edges'] = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(1, 2,), dtype=np.float32)
+        '''
+        format of spatial_edges: [max_human_num, [state_t, state_(t+1), ..., state(t+self.pred_steps)]]
+        '''
+
+        # predictions only include mu_x, mu_y (or px, py)
+        self.spatial_edge_dim = int(2*(self.predict_steps+1))
+
+        d['spatial_edges'] = gym.spaces.Box(low=-np.inf, high=np.inf,
+                            shape=(self.config.sim.human_num + self.config.sim.human_num_range, self.spatial_edge_dim),
+                            dtype=np.float32)
+
+        # masks for gst pred model
+        # whether each human is visible to robot (ordered by human ID, should not be sorted)
+        d['visible_masks'] = gym.spaces.Box(low=-np.inf, high=np.inf,
+                                            shape=(self.config.sim.human_num + self.config.sim.human_num_range,),
+                                            dtype=np.bool)
+
+        # number of humans detected at each timestep
+        d['detected_human_num'] = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32)
 
         self.observation_space = gym.spaces.Dict(d)
-        # high = np.inf * np.ones([2, ])
-        # self.action_space = gym.spaces.Box(-high, high, dtype=np.float32)
-    
-    def reset(self, phase='train', test_case=None):
 
-        self.human = []
+        high = np.inf * np.ones([2, ])
+        self.action_space = gym.spaces.Box(-high, high, dtype=np.float32)
 
-        if self.phase is not None:
-            phase = self.phase
-        if self.test_case is not None:
-            test_case=self.test_case
+    def talk2Env(self, data):
+        """
+        Call this function when you want extra information to send to/recv from the env
+        :param data: data that is sent from gst_predictor network to the env, it has 2 parts:
+        output predicted traj and output masks
+        :return: True means received
+        """
+        self.gst_out_traj=data
+        return True
 
-        if self.robot is None:
-            raise AttributeError('robot has to be set!')
-        assert phase in ['train', 'val', 'test']
-        if test_case is not None:
-            self.case_counter[phase] = test_case # test case is passed in to calculate specific seed to generate case
-        self.global_time = 0
-        self.step_counter = 0
-        self.id_counter = 0
-        counter_offset = {'train': self.case_capacity['val'] + self.case_capacity['test'],
-                          'val': 0, 'test': self.case_capacity['val']}
-        self.rand_seed = counter_offset[phase] + self.case_counter[phase] + self.thisSeed
-        np.random.seed(self.rand_seed)
 
-        self.generate_robot_humans(phase)
-        ob = self.generate_ob(reset=True)
+    # reset = True: reset calls this function; reset = False: step calls this function
+    def generate_ob(self, reset, sort=False):
+        """Generate observation for reset and step functions"""
+        # since gst pred model needs ID tracking, don't sort all humans
+        # inherit from crowd_sim_lstm, not crowd_sim_pred to avoid computation of true pred!
+        # sort=False because we will sort in wrapper in vec_pretext_normalize.py later
+        parent_ob = super(CrowdSimPred, self).generate_ob(reset=reset, sort=False)
 
-        return ob
-    
-    def step(self, action, update=True):
-
-        human_actions = self.get_human_actions()
-        reward, done, episode_info = self.calc_reward(action, danger_zone='future')
-
-        self.robot.step(action)
-        for i, human_action in enumerate(human_actions):
-            self.humans[i].step(human_action)
-
-        self.global_time += self.time_step # max episode length=time_limit/time_step
-        self.step_counter =self.step_counter+1
-
-        info={'info':episode_info}
-
-        ob = self.generate_ob(reset=False)
-
-        return ob, reward, done, info
-
-    def generate_ob(self, reset):
+        # add additional keys, removed unused keys
         ob = {}
 
-        self.update_last_human_states(self.human_visibility, reset=reset)
+        ob['visible_masks'] = parent_ob['visible_masks']
+        ob['robot_node'] = parent_ob['robot_node']
+        ob['temporal_edges'] = parent_ob['temporal_edges']
 
-        ob_list = [human.get_observable_state() for human in self.humans]
-        
-        state = JointState(self.robot.get_full_state(), ob_list)
-        state_tensor = torch.cat([torch.Tensor([state.self_state + human_state])
-                                  for human_state in state.human_states], dim=0)
-        state_tensor = self.rotate(state_tensor)
+        ob['spatial_edges'] = np.tile(parent_ob['spatial_edges'], self.predict_steps+1)
 
-        ob['robot_human_node'] = state_tensor
-        
+        ob['detected_human_num'] = parent_ob['detected_human_num']
+
         return ob
 
-    # def generate_robot_humans(self, phase, human_num=None):
-        if self.record:
-            px, py = 0, 0
-            gx, gy = 0, -1.5
-            self.robot.set(px, py, gx, gy, 0, 0, np.pi / 2)
-            # generate a dummy human
-            for i in range(self.max_human_num):
-                human = Human(self.config, 'humans')
-                human.set(15, 15, 15, 15, 0, 0, 0)
-                human.isObstacle = True
-                self.humans.append(human)
-
-        else:
-            # for sim2real
-            if self.robot.kinematics == 'unicycle':
-                # generate robot
-                angle = np.random.uniform(0, np.pi * 2)
-                px = self.arena_size * np.cos(angle)
-                py = self.arena_size * np.sin(angle)
-                while True:
-                    gx, gy = np.random.uniform(-self.arena_size, self.arena_size, 2)
-                    if np.linalg.norm([px - gx, py - gy]) >= 4:  # 1 was 6
-                        break
-                self.robot.set(px, py, gx, gy, 0, 0, np.random.uniform(0, 2 * np.pi))  # randomize init orientation
-                # 1 to 4 humans
-                self.human_num = np.random.randint(1, self.config.sim.human_num + self.human_num_range + 1)
-
-            # for sim exp
-            else:
-                # generate robot
-                while True:
-                    px, py, gx, gy = np.random.uniform(-self.arena_size, self.arena_size, 4)
-                    if np.linalg.norm([px - gx, py - gy]) >= 8: # 6
-                        break
-                self.robot.set(px, py, gx, gy, 0, 0, np.pi / 2)
-                # generate humans
-                self.human_num = np.random.randint(low=self.config.sim.human_num - self.human_num_range,
-                                                   high=self.config.sim.human_num + self.human_num_range + 1)
-
-
-            self.generate_random_human_position(human_num=self.human_num)
-            self.last_human_states = np.zeros((self.human_num, 5))
-            # set human ids
-            for i in range(self.human_num):
-                self.humans[i].id = i
 
     def calc_reward(self, action, danger_zone='future'):
-        dmin = float('inf')
-        danger_dists = []
-
-        for i, human in enumerate(self.humans):
-            dx = human.px - self.robot.px
-            dy = human.py - self.robot.py
-            closest_dist = (dx ** 2 + dy ** 2) ** (1 / 2) - human.radius - self.robot.radius
-
-            if closest_dist < self.discomfort_dist:
-                danger_dists.append(closest_dist)
-            if closest_dist < 0:
-                collision = True
-                break
-            elif closest_dist < dmin:
-                dmin = closest_dist
-                
-        if self.robot.kinematics == 'unicycle':
-            goal_radius = 0.6
-        else:
-            goal_radius = self.robot.radius
-        reaching_goal = norm(
-            np.array(self.robot.get_position()) - np.array(self.robot.get_goal_position())) < goal_radius
-
-
-        if self.global_time >= self.time_limit - 1:
-            reward = 0
-            done = True
-            info = Timeout()
-        elif collision:
-            reward = self.collision_penalty
-            done = True
-            info = Collision()
-        elif reaching_goal:
-            reward = self.success_reward
-            done = True
-            info = ReachGoal()
-        elif dmin < self.discomfort_dist:
-            # only penalize agent for getting too close if it's visible
-            # adjust the reward based on FPS
-            reward = (dmin - self.discomfort_dist) * self.discomfort_penalty_factor * self.time_step
-            done = False
-            info = Danger(dmin)
-        else:
-            reward = 0
-            done = False
-            info = Nothing()
-
-        return reward, done, info
-    
-    def rotate(self, state):
-        """
-        Transform the coordinate to agent-centric.
-        Input state tensor is of size (batch_size, state_length)
-
-        """
-        # 'px', 'py', 'vx', 'vy', 'radius', 'gx', 'gy', 'v_pref', 'theta', 'px1', 'py1', 'vx1', 'vy1', 'radius1'
-        #  0     1      2     3      4        5     6      7         8       9     10      11     12       13
-        batch = state.shape[0]
-        dx = (state[:, 5] - state[:, 0]).reshape((batch, -1))
-        dy = (state[:, 6] - state[:, 1]).reshape((batch, -1))
-        rot = torch.atan2(state[:, 6] - state[:, 1], state[:, 5] - state[:, 0])
-
-        dg = torch.norm(torch.cat([dx, dy], dim=1), 2, dim=1, keepdim=True)
-        v_pref = state[:, 7].reshape((batch, -1))
-        vx = (state[:, 2] * torch.cos(rot) + state[:, 3] * torch.sin(rot)).reshape((batch, -1))
-        vy = (state[:, 3] * torch.cos(rot) - state[:, 2] * torch.sin(rot)).reshape((batch, -1))
-
-        radius = state[:, 4].reshape((batch, -1))
-
-        # set theta to be zero since it's not used
-        theta = torch.zeros_like(v_pref)
-        vx1 = (state[:, 11] * torch.cos(rot) + state[:, 12] * torch.sin(rot)).reshape((batch, -1))
-        vy1 = (state[:, 12] * torch.cos(rot) - state[:, 11] * torch.sin(rot)).reshape((batch, -1))
-        px1 = (state[:, 9] - state[:, 0]) * torch.cos(rot) + (state[:, 10] - state[:, 1]) * torch.sin(rot)
-        px1 = px1.reshape((batch, -1))
-        py1 = (state[:, 10] - state[:, 1]) * torch.cos(rot) - (state[:, 9] - state[:, 0]) * torch.sin(rot)
-        py1 = py1.reshape((batch, -1))
-        radius1 = state[:, 13].reshape((batch, -1))
-        radius_sum = radius + radius1
-        da = torch.norm(torch.cat([(state[:, 0] - state[:, 9]).reshape((batch, -1)), (state[:, 1] - state[:, 10]).
-                                reshape((batch, -1))], dim=1), 2, dim=1, keepdim=True)
-        new_state = torch.cat([dg, v_pref, theta, radius, vx, vy, px1, py1, vx1, vy1, radius1, da, radius_sum], dim=1)
-
-        return new_state 
+        # inherit from crowd_sim_lstm, not crowd_sim_pred to prevent social reward calculation
+        # since we don't know the GST predictions yet
+        reward, done, episode_info = super(CrowdSimPred, self).calc_reward(action, danger_zone=danger_zone)
+        return reward, done, episode_info
 
 
     def render(self, mode='human'):
@@ -250,6 +129,8 @@ class CrowdSimSARL(CrowdSimPred):
             # increase the distance between the line start point and the end point
             newPoint = [extendFactor * newPoint[0, 0], extendFactor * newPoint[1, 0], 1]
             return newPoint
+
+
 
         ax=self.render_axis
         artists=[]

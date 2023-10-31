@@ -31,6 +31,11 @@ register(
 )
 
 register(
+    id='CrowdSimSARL-v1',
+    entry_point='crowd_sim.envs:CrowdSimCopy',
+)
+
+register(
     id='rosTurtlebot2iEnv-v0',
     entry_point='crowd_sim.envs.ros_turtlebot2i_env:rosTurtlebot2iEnv',
 )
