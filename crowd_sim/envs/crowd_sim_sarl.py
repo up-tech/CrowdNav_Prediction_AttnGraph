@@ -1,5 +1,8 @@
 import gym
 import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
+from matplotlib import patches
 
 from crowd_sim.envs.crowd_sim_pred import CrowdSimPred
 
@@ -22,7 +25,19 @@ class CrowdSimSARL(CrowdSimPred):
 
         # to receive data from gst pred model
         self.gst_out_traj = None
+    
+        self.fig, self.ax = plt.subplots(figsize=(7, 7))
+        self.ax.set_xlim(-6.5, 6.5) # 6
+        self.ax.set_ylim(-6.5, 6.5)
+        self.ax.axes.xaxis.set_visible(False)
+        self.ax.axes.yaxis.set_visible(False)
+        plt.ion()
+        plt.show()
 
+    def configure(self, config):
+        """ read the config to the environment variables """
+        super().configure(config)
+        self.use_sarl = hasattr(config, 'sarl')
 
     def set_robot(self, robot):
         """set observation space and action space"""
@@ -80,16 +95,19 @@ class CrowdSimSARL(CrowdSimPred):
         # sort=False because we will sort in wrapper in vec_pretext_normalize.py later
         parent_ob = super(CrowdSimPred, self).generate_ob(reset=reset, sort=False)
 
+        if self.use_sarl:
+            ob = parent_ob
+
         # add additional keys, removed unused keys
-        ob = {}
+        # ob = {}
 
-        ob['visible_masks'] = parent_ob['visible_masks']
-        ob['robot_node'] = parent_ob['robot_node']
-        ob['temporal_edges'] = parent_ob['temporal_edges']
+        # ob['visible_masks'] = parent_ob['visible_masks']
+        # ob['robot_node'] = parent_ob['robot_node']
+        # ob['temporal_edges'] = parent_ob['temporal_edges']
 
-        ob['spatial_edges'] = np.tile(parent_ob['spatial_edges'], self.predict_steps+1)
+        # ob['spatial_edges'] = np.tile(parent_ob['spatial_edges'], self.predict_steps+1)
 
-        ob['detected_human_num'] = parent_ob['detected_human_num']
+        # ob['detected_human_num'] = parent_ob['detected_human_num']
 
         return ob
 
@@ -97,19 +115,19 @@ class CrowdSimSARL(CrowdSimPred):
     def calc_reward(self, action, danger_zone='future'):
         # inherit from crowd_sim_lstm, not crowd_sim_pred to prevent social reward calculation
         # since we don't know the GST predictions yet
+        if self.use_sarl:
+            danger_zone='circle'
         reward, done, episode_info = super(CrowdSimPred, self).calc_reward(action, danger_zone=danger_zone)
         return reward, done, episode_info
-
+    
+    def onestep_lookahead(self, action):
+        return self.step(action, update=False)
 
     def render(self, mode='human'):
         """
         render function
         use talk2env to plot the predicted future traj of humans
         """
-        import matplotlib.pyplot as plt
-        import matplotlib.lines as mlines
-        from matplotlib import patches
-
         plt.rcParams['animation.ffmpeg_path'] = '/usr/bin/ffmpeg'
 
         robot_color = 'gold'
@@ -130,21 +148,19 @@ class CrowdSimSARL(CrowdSimPred):
             newPoint = [extendFactor * newPoint[0, 0], extendFactor * newPoint[1, 0], 1]
             return newPoint
 
-
-
-        ax=self.render_axis
+        #ax=self.render_axis
         artists=[]
 
         # add goal
         goal=mlines.Line2D([self.robot.gx], [self.robot.gy], color=goal_color, marker='*', linestyle='None', markersize=15, label='Goal')
-        ax.add_artist(goal)
+        self.ax.add_artist(goal)
         artists.append(goal)
 
         # add robot
         robotX,robotY=self.robot.get_position()
 
         robot=plt.Circle((robotX,robotY), self.robot.radius, fill=True, color=robot_color)
-        ax.add_artist(robot)
+        self.ax.add_artist(robot)
         artists.append(robot)
 
 
@@ -163,7 +179,7 @@ class CrowdSimSARL(CrowdSimPred):
         arrows = [patches.FancyArrowPatch(*arrow, color=arrow_color, arrowstyle=arrow_style)
                   for arrow in arrowStartEnd]
         for arrow in arrows:
-            ax.add_artist(arrow)
+            self.ax.add_artist(arrow)
             artists.append(arrow)
 
 
@@ -189,14 +205,14 @@ class CrowdSimSARL(CrowdSimPred):
             FOVLine2.set_xdata(np.array([startPointX, startPointX + FOVEndPoint2[0]]))
             FOVLine2.set_ydata(np.array([startPointY, startPointY + FOVEndPoint2[1]]))
 
-            ax.add_artist(FOVLine1)
-            ax.add_artist(FOVLine2)
+            self.ax.add_artist(FOVLine1)
+            self.ax.add_artist(FOVLine2)
             artists.append(FOVLine1)
             artists.append(FOVLine2)
 
         # add an arc of robot's sensor range
         sensor_range = plt.Circle(self.robot.get_position(), self.robot.sensor_range + self.robot.radius+self.config.humans.radius, fill=False, linestyle='--')
-        ax.add_artist(sensor_range)
+        self.ax.add_artist(sensor_range)
         artists.append(sensor_range)
 
         # add humans and change the color of them based on visibility
@@ -207,7 +223,7 @@ class CrowdSimSARL(CrowdSimPred):
 
         # plot the current human states
         for i in range(len(self.humans)):
-            ax.add_artist(human_circles[i])
+            self.ax.add_artist(human_circles[i])
             artists.append(human_circles[i])
 
             # green: visible; red: invisible
@@ -231,12 +247,12 @@ class CrowdSimSARL(CrowdSimPred):
                                         self.config.humans.radius, fill=False, color='tab:orange', linewidth=1.5)
                     # circle = plt.Circle(np.array([robotX, robotY]),
                     #                     self.humans[i].radius, fill=False)
-                    ax.add_artist(circle)
+                    self.ax.add_artist(circle)
                     artists.append(circle)
 
         plt.pause(0.1)
         for item in artists:
             item.remove() # there should be a better way to do this. For example,
             # initially use add_artist and draw_artist later on
-        for t in ax.texts:
+        for t in self.ax.texts:
             t.set_visible(False)

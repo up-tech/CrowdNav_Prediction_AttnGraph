@@ -1,4 +1,6 @@
 import logging
+from os import write
+from re import S
 import torch
 import copy
 import torch.nn as nn
@@ -6,6 +8,7 @@ import torch.optim as optim
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from crowd_sim.envs.utils.info import *
+from torch.utils.tensorboard import SummaryWriter
 
 
 class Explorer(object):
@@ -17,6 +20,8 @@ class Explorer(object):
         self.gamma = gamma
         self.target_policy = target_policy
         self.target_model = None
+        self.writer = SummaryWriter(log_dir="logs/sarl")
+        self.count_num = 0
 
     def update_target_model(self, target_model):
         self.target_model = copy.deepcopy(target_model)
@@ -38,6 +43,7 @@ class Explorer(object):
         timeout_cases = []
         for i in range(k):
             ob = self.env.reset(phase)
+            print(f"run {k} episodes")
             done = False
             states = []
             actions = []
@@ -46,6 +52,7 @@ class Explorer(object):
                 action = self.robot.act(ob)
                 ob, reward, done, info = self.env.step(action)
                 states.append(self.robot.policy.last_state)
+                #print(len(states))
                 actions.append(action)
                 rewards.append(reward)
 
@@ -54,9 +61,11 @@ class Explorer(object):
                     min_dist.append(info.min_dist)
 
             if isinstance(info, ReachGoal):
+                print('reach goal')
                 success += 1
                 success_times.append(self.env.global_time)
             elif isinstance(info, Collision):
+                print('Collision ')
                 collision += 1
                 collision_cases.append(i)
                 collision_times.append(self.env.global_time)
@@ -68,9 +77,8 @@ class Explorer(object):
                 raise ValueError('Invalid end signal from environment')
 
             if update_memory:
-                print('update memory')
-                if isinstance(info, ReachGoal) or isinstance(info, Collision):
-                    print('push memory')
+                if isinstance(info, ReachGoal) or isinstance(info, Collision) or isinstance(info, Timeout):
+                    print('push data to memory')
                     # only add positive(success) or negative(collision) experience in experience set
                     self.update_memory(states, actions, rewards, imitation_learning)
 
@@ -83,6 +91,15 @@ class Explorer(object):
         avg_nav_time = sum(success_times) / len(success_times) if success_times else self.env.time_limit
 
         extra_info = '' if episode is None else 'in episode {} '.format(episode)
+        print(f"success rate {success_rate}")
+        print(f"collision rate {collision_rate}")
+        print(f"nav time {avg_nav_time}")
+        print(f"total reward {average(cumulative_rewards)}")
+
+        self.count_num += 1
+        self.writer.add_scalar('eprwmean', average(cumulative_rewards), self.count_num)
+        self.writer.close()
+
         logging.info('{:<5} {}has success rate: {:.2f}, collision rate: {:.2f}, nav time: {:.2f}, total reward: {:.4f}'.
                      format(phase.upper(), extra_info, success_rate, collision_rate, avg_nav_time,
                             average(cumulative_rewards)))
@@ -98,7 +115,7 @@ class Explorer(object):
     def update_memory(self, states, actions, rewards, imitation_learning=False):
         if self.memory is None or self.gamma is None:
             raise ValueError('Memory or gamma value is not set!')
-
+        print(f'memory length: {len(self.memory)}')
         for i, state in enumerate(states):
             reward = rewards[i]
 
@@ -150,6 +167,8 @@ class Trainer(object):
         self.data_loader = None
         self.batch_size = batch_size
         self.optimizer = None
+        self.writer = SummaryWriter(log_dir="logs/sarl")
+        self.count_num = 0
 
     def set_learning_rate(self, learning_rate):
         logging.info('Current learning rate: %f', learning_rate)
@@ -194,11 +213,16 @@ class Trainer(object):
             self.optimizer.zero_grad()
             outputs = self.model(inputs)
             loss = self.criterion(outputs, values)
+
             loss.backward()
             self.optimizer.step()
             losses += loss.data.item()
 
         average_loss = losses / num_batches
+
+        self.count_num += 1
+        self.writer.add_scalar('average_loss', average_loss, self.count_num)
+        self.writer.close()
         logging.debug('Average loss : %.2E', average_loss)
 
         return average_loss

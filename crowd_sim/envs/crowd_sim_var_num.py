@@ -32,6 +32,7 @@ class CrowdSimVarNum(CrowdSim):
         """ read the config to the environment variables """
         super(CrowdSimVarNum, self).configure(config)
         self.action_type=config.action_space.kinematics
+        self.use_sarl = hasattr(config, 'sarl')
 
     # set observation space and action space
     def set_robot(self, robot):
@@ -276,6 +277,9 @@ class CrowdSimVarNum(CrowdSim):
 
         self.ob = ob
 
+        if self.use_sarl:
+            ob = [human.get_observable_state() for human in self.humans]
+
         return ob
 
 
@@ -330,11 +334,17 @@ class CrowdSimVarNum(CrowdSim):
         # case capacity: the maximum number for train(max possible int -2000), val(1000), and test(1000)
         # val start from seed=0, test start from seed=case_capacity['val']=1000
         # train start from self.case_capacity['val'] + self.case_capacity['test']=2000
-        counter_offset = {'train': self.case_capacity['val'] + self.case_capacity['test'],
+        counter_offset = {'train': self.case_capacity['val'] + self.case_capacity['test'] + 75,
                           'val': 0, 'test': self.case_capacity['val']}
 
         # here we use a counter to calculate seed. The seed=counter_offset + case_counter
-        self.rand_seed = counter_offset[phase] + self.case_counter[phase] + self.thisSeed
+        # thisSeed is setted when using multi env
+        if self.use_sarl:
+            self.rand_seed = counter_offset[phase] + self.case_counter[phase]
+        else:
+            self.rand_seed = counter_offset[phase] + self.case_counter[phase] + self.thisSeed
+
+        print(f"random seed : {self.rand_seed}")
         np.random.seed(self.rand_seed)
 
         self.generate_robot_humans(phase)
@@ -345,7 +355,11 @@ class CrowdSimVarNum(CrowdSim):
             self.cur_human_states[i] = np.array([self.humans[i].px, self.humans[i].py, self.humans[i].radius])
 
         # case size is used to make sure that the case_counter is always between 0 and case_size[phase]
-        self.case_counter[phase] = (self.case_counter[phase] + int(1*self.nenv)) % self.case_size[phase]
+
+        if self.use_sarl:
+            self.case_counter[phase] = (self.case_counter[phase] + 1) % self.case_size[phase]
+        else:
+            self.case_counter[phase] = (self.case_counter[phase] + int(1*self.nenv)) % self.case_size[phase]
 
         # initialize potential and angular potential
         rob_goal_vec = np.array([self.robot.gx, self.robot.gy]) - np.array([self.robot.px, self.robot.py])
@@ -362,7 +376,7 @@ class CrowdSimVarNum(CrowdSim):
 
         return ob
 
-
+    # unused
     def step(self, action, update=True):
         """
         Step the environment forward for one timestep
@@ -392,12 +406,14 @@ class CrowdSimVarNum(CrowdSim):
 
 
         # apply action and update all agents
-        self.robot.step(action)
-        for i, human_action in enumerate(human_actions):
-            self.humans[i].step(human_action)
-
-        self.global_time += self.time_step # max episode length=time_limit/time_step
-        self.step_counter =self.step_counter+1
+        if update:
+            self.robot.step(action)
+            for i, human_action in enumerate(human_actions):
+                self.humans[i].step(human_action)
+            self.global_time += self.time_step # max episode length=time_limit/time_step
+            self.step_counter =self.step_counter+1
+        else:
+            pass
 
         info={'info':episode_info}
 
@@ -439,8 +455,10 @@ class CrowdSimVarNum(CrowdSim):
         assert self.min_human_num <= self.human_num <= self.max_human_num
 
         # compute the observation
-        ob = self.generate_ob(reset=False, sort=self.config.args.sort_humans)
-
+        if update:
+            ob = self.generate_ob(reset=False, sort=self.config.args.sort_humans)
+        else:
+            ob = [human.get_next_observable_state(action) for human, action in zip(self.humans, human_actions)]
 
         # Update all humans' goals randomly midway through episode
         if self.random_goal_changing:

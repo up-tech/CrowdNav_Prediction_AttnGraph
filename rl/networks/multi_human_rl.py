@@ -1,3 +1,5 @@
+from math import isnan, nan
+import math
 import torch
 import numpy as np
 from crowd_sim.envs.utils.action import ActionRot, ActionXY
@@ -50,6 +52,9 @@ class MultiHumanRL(CADRL):
                     rotated_batch_input = torch.cat([rotated_batch_input, occupancy_maps.to(self.device)], dim=2)
                 # VALUE UPDATE
                 next_state_value = self.model(rotated_batch_input).data.item()
+                if math.isnan(next_state_value):
+                    print(rotated_batch_input)
+                    print(f'next state value: {next_state_value}, reward: {reward}, value: {value}')
                 value = reward + pow(self.gamma, self.time_step * state.self_state.v_pref) * next_state_value
                 self.action_values.append(value)
                 if value > max_value:

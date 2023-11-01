@@ -19,13 +19,22 @@ class ConfigSARL(object):
     sarl.with_om = False
     sarl.with_global_state = False
 
+    cadrl = BaseConfig()
+    cadrl.mlp_dims = '150, 100, 100, 1'
+    cadrl.multiagent_training = False
+
+    om = BaseConfig()
+    om.cell_num = 4
+    om.cell_size = 1
+    om.om_channel_size = 3
+
     training = BaseConfig()
     training.device = "cuda:0" if args.cuda else "cpu"
     training.capacity = 100000
-    training.epsilon_start = 0.5
+    training.epsilon_start = 0.15
     training.epsilon_end = 0.1
     training.epsilon_decay = 4000
-    training.checkpoint_interval = 1000
+    training.checkpoint_interval = 100
 
     training.batch_size = 100
     training.rl_learning_rate = 0.001
@@ -33,7 +42,7 @@ class ConfigSARL(object):
     training.train_episodes = 8500
     training.sample_episodes = 1
     training.target_update_interval = 50
-    training.evaluation_interval = 1000
+    training.evaluation_interval = 100
 
     policy = BaseConfig()
     policy.rl_gamme = 0.9
@@ -70,7 +79,7 @@ class ConfigSARL(object):
     sim = BaseConfig()
     sim.circle_radius = 6 * np.sqrt(2)
     sim.arena_size = 6
-    sim.human_num = 20
+    sim.human_num = 5
     # actual human num in each timestep, in [human_num-human_num_range, human_num+human_num_range]
     sim.human_num_range = 0
     sim.predict_steps = 5
@@ -80,7 +89,7 @@ class ConfigSARL(object):
     # 'none': no prediction
     sim.predict_method = 'inferred'
     # render the simulation during training or not
-    sim.render = True
+    sim.render = False
 
     # for save_traj only
     render_traj = False

@@ -102,33 +102,32 @@ class CrowdSimPred(CrowdSimVarNum):
         step function
         Compute actions for all agents, detect collision, update environment and return (ob, reward, done, info)
         """
-        if self.robot.policy.name == 'ORCA':
-            # assemble observation for orca: px, py, vx, vy, r
-            # include all observable humans from t to t+t_pred
-            _, _, human_visibility = self.get_num_human_in_fov()
-            # [self.predict_steps + 1, self.human_num, 4]
-            human_states = copy.deepcopy(self.calc_human_future_traj(method='truth'))
-            # append the radius, convert it to [human_num*(self.predict_steps+1), 5] by treating each predicted pos as a new human
-            human_states = np.concatenate((human_states.reshape((-1, 4)),
-                                           np.tile(self.last_human_states[:, -1], self.predict_steps+1).reshape((-1, 1))),
-                                          axis=1)
-            # get orca action
-            action = self.robot.act(human_states.tolist())
-        else:
-            action = self.robot.policy.clip_action(action, self.robot.v_pref)
+        if not self.use_sarl:
+            if self.robot.policy.name == 'ORCA':
+                # assemble observation for orca: px, py, vx, vy, r
+                # include all observable humans from t to t+t_pred
+                _, _, human_visibility = self.get_num_human_in_fov()
+                # [self.predict_steps + 1, self.human_num, 4]
+                human_states = copy.deepcopy(self.calc_human_future_traj(method='truth'))
+                # append the radius, convert it to [human_num*(self.predict_steps+1), 5] by treating each predicted pos as a new human
+                human_states = np.concatenate((human_states.reshape((-1, 4)),
+                                            np.tile(self.last_human_states[:, -1], self.predict_steps+1).reshape((-1, 1))),
+                                            axis=1)
+                # get orca action
+                action = self.robot.act(human_states.tolist())
+            else:
+                action = self.robot.policy.clip_action(action, self.robot.v_pref)
 
-        if self.robot.kinematics == 'unicycle':
-            self.desiredVelocity[0] = np.clip(self.desiredVelocity[0] + action.v, -self.robot.v_pref, self.robot.v_pref)
-            action = ActionRot(self.desiredVelocity[0], action.r)
+            if self.robot.kinematics == 'unicycle':
+                self.desiredVelocity[0] = np.clip(self.desiredVelocity[0] + action.v, -self.robot.v_pref, self.robot.v_pref)
+                action = ActionRot(self.desiredVelocity[0], action.r)
 
-            # if action.r is delta theta
-            action = ActionRot(self.desiredVelocity[0], action.r)
-            if self.record:
-                self.episodeRecoder.unsmoothed_actions.append(list(action))
+                # if action.r is delta theta
+                action = ActionRot(self.desiredVelocity[0], action.r)
+                if self.record:
+                    self.episodeRecoder.unsmoothed_actions.append(list(action))
 
-            action = self.smooth_action(action)
-
-
+                action = self.smooth_action(action)
 
         human_actions = self.get_human_actions()
 
@@ -152,16 +151,21 @@ class CrowdSimPred(CrowdSimVarNum):
                 self.episodeRecoder.saveEpisode(self.case_counter['test'])
 
         # apply action and update all agents
-        self.robot.step(action)
-        for i, human_action in enumerate(human_actions):
-            self.humans[i].step(human_action)
-            self.cur_human_states[i] = np.array([self.humans[i].px, self.humans[i].py, self.humans[i].radius])
+        if update:
+            self.robot.step(action)
+            for i, human_action in enumerate(human_actions):
+                self.humans[i].step(human_action)
+                self.cur_human_states[i] = np.array([self.humans[i].px, self.humans[i].py, self.humans[i].radius])
+            self.global_time += self.time_step # max episode length=time_limit/time_step
+            self.step_counter = self.step_counter+1
+        else:
+            pass
 
-        self.global_time += self.time_step # max episode length=time_limit/time_step
-        self.step_counter = self.step_counter+1
-
-        info={'info':episode_info}
-
+        if self.use_sarl:
+            info=episode_info
+        else:
+            info={'info':episode_info}
+        
         # Add or remove at most self.human_num_range humans
         # if self.human_num_range == 0 -> human_num is fixed at all times
         if self.human_num_range > 0 and self.global_time % 5 == 0:
@@ -195,8 +199,10 @@ class CrowdSimPred(CrowdSimVarNum):
 
 
         # compute the observation
-        ob = self.generate_ob(reset=False)
-
+        if update:
+            ob = self.generate_ob(reset=False)
+        else:
+            ob = [human.get_next_observable_state(action) for human, action in zip(self.humans, human_actions)]
 
         # Update all humans' goals randomly midway through episode
         if self.random_goal_changing:

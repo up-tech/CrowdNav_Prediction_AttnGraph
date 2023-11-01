@@ -52,6 +52,8 @@ def main():
     save_config_dir = os.path.join(output_dir, 'configs')
     if not os.path.exists(save_config_dir):
         os.makedirs(save_config_dir)
+    
+    rl_weight_file = os.path.join(output_dir, 'rl_model.pth')
 
     shutil.copy('arguments.py', output_dir)
     shutil.copy('crowd_nav/configs/config.py', save_config_dir)
@@ -73,6 +75,7 @@ def main():
 
     torch.set_num_threads(algo_args.num_threads)
     device = torch.device("cuda" if algo_args.cuda else "cpu")
+    device = 'cpu'
 
     if config.sim.render:
         algo_args.num_processes = 1
@@ -90,6 +93,7 @@ def main():
     else:
         ax = None
 
+    torch.set_num_threads(10)
 
     # Create a wrapped, monitored VecEnv
     # envs = make_vec_envs(env_name, algo_args.seed, algo_args.num_processes,
@@ -126,6 +130,8 @@ def main():
     trainer.set_learning_rate(rl_learning_rate)
     explorer = Explorer(env, env.robot, device, memory, policy.gamma, target_policy=policy)
 
+    explorer.update_target_model(model)
+
     episode = 0
     while episode < train_episodes:
         if episode < epsilon_decay:
@@ -137,6 +143,12 @@ def main():
         trainer.optimize_batch(train_batches)
         episode += 1
 
+        if episode % target_update_interval == 0:
+            explorer.update_target_model(model)
+            print('update model')
+        
+        if episode != 0 and episode % checkpoint_interval == 0:
+            torch.save(model.state_dict(), rl_weight_file)
 
         # if j % algo_args.log_interval == 0 and len(episode_rewards) > 1:
         #     total_num_steps = (j + 1) * algo_args.num_processes * algo_args.num_steps
