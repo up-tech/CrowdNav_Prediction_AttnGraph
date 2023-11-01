@@ -3,6 +3,7 @@ from os import write
 from re import S
 import torch
 import copy
+import math
 import torch.nn as nn
 import torch.optim as optim
 from torch.autograd import Variable
@@ -213,12 +214,15 @@ class Trainer(object):
             self.optimizer.zero_grad()
             outputs = self.model(inputs)
             loss = self.criterion(outputs, values)
+            if math.isnan(loss):
+                print(inputs)
 
             loss.backward()
             self.optimizer.step()
             losses += loss.data.item()
 
         average_loss = losses / num_batches
+        print(f"average loss: {average_loss}")
 
         self.count_num += 1
         self.writer.add_scalar('average_loss', average_loss, self.count_num)

@@ -31,7 +31,7 @@ class ConfigSARL(object):
     training = BaseConfig()
     training.device = "cuda:0" if args.cuda else "cpu"
     training.capacity = 100000
-    training.epsilon_start = 0.15
+    training.epsilon_start = 0.5
     training.epsilon_end = 0.1
     training.epsilon_decay = 4000
     training.checkpoint_interval = 100
@@ -42,7 +42,7 @@ class ConfigSARL(object):
     training.train_episodes = 8500
     training.sample_episodes = 1
     training.target_update_interval = 50
-    training.evaluation_interval = 100
+    training.evaluation_interval = 1000
 
     policy = BaseConfig()
     policy.rl_gamme = 0.9

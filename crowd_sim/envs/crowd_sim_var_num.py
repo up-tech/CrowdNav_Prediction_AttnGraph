@@ -334,7 +334,7 @@ class CrowdSimVarNum(CrowdSim):
         # case capacity: the maximum number for train(max possible int -2000), val(1000), and test(1000)
         # val start from seed=0, test start from seed=case_capacity['val']=1000
         # train start from self.case_capacity['val'] + self.case_capacity['test']=2000
-        counter_offset = {'train': self.case_capacity['val'] + self.case_capacity['test'] + 75,
+        counter_offset = {'train': self.case_capacity['val'] + self.case_capacity['test'],
                           'val': 0, 'test': self.case_capacity['val']}
 
         # here we use a counter to calculate seed. The seed=counter_offset + case_counter

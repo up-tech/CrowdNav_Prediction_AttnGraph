@@ -56,7 +56,7 @@ def main():
             torch.backends.cudnn.benchmark = True
             torch.backends.cudnn.deterministic = False
     
-    torch.set_num_threads(algo_args.num_threads)
+    torch.set_num_threads(18)
     device = 'cpu'
 
     policy = SARL()
