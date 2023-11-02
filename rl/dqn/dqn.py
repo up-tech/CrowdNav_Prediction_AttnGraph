@@ -99,7 +99,7 @@ class Explorer(object):
 
         self.count_num += 1
         self.writer.add_scalar('eprwmean', average(cumulative_rewards), self.count_num)
-        self.writer.close()
+        #self.writer.close()
 
         logging.info('{:<5} {}has success rate: {:.2f}, collision rate: {:.2f}, nav time: {:.2f}, total reward: {:.4f}'.
                      format(phase.upper(), extra_info, success_rate, collision_rate, avg_nav_time,
@@ -163,7 +163,8 @@ class Trainer(object):
         """
         self.model = model
         self.device = device
-        self.criterion = nn.MSELoss().to(device)
+        #self.criterion_check = nn.MSELoss().to(device)
+        self.criterion = nn.L1Loss().to(device)
         self.memory = memory
         self.data_loader = None
         self.batch_size = batch_size
@@ -206,6 +207,7 @@ class Trainer(object):
         if self.data_loader is None:
             self.data_loader = DataLoader(self.memory, self.batch_size, shuffle=True)
         losses = 0
+        lossed_check = 0
         for _ in range(num_batches):
             inputs, values = next(iter(self.data_loader))
             inputs = Variable(inputs)
@@ -214,8 +216,11 @@ class Trainer(object):
             self.optimizer.zero_grad()
             outputs = self.model(inputs)
             loss = self.criterion(outputs, values)
-            if math.isnan(loss):
-                print(inputs)
+            #loss_check = self.criterion_check(outputs, values)
+
+            # if math.isnan(loss_check):
+            #     print(f"loss mes: {loss_check}")
+            #     print(f"loss huber: {loss}")
 
             loss.backward()
             self.optimizer.step()
@@ -226,7 +231,7 @@ class Trainer(object):
 
         self.count_num += 1
         self.writer.add_scalar('average_loss', average_loss, self.count_num)
-        self.writer.close()
+        #self.writer.close()
         logging.debug('Average loss : %.2E', average_loss)
 
         return average_loss

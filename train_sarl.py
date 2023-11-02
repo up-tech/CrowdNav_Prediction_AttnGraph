@@ -9,8 +9,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import gym
 
-from rl import ppo
-from rl.networks import network_utils
 from arguments import get_args
 from rl.networks.envs import make_vec_envs
 from rl.networks.model import Policy
@@ -73,7 +71,6 @@ def main():
             torch.backends.cudnn.benchmark = True
             torch.backends.cudnn.deterministic = False
 
-    torch.set_num_threads(algo_args.num_threads)
     device = torch.device("cuda" if algo_args.cuda else "cpu")
     device = 'cpu'
 
@@ -93,7 +90,7 @@ def main():
     else:
         ax = None
 
-    torch.set_num_threads(10)
+    torch.set_num_threads(18)
 
     # Create a wrapped, monitored VecEnv
     # envs = make_vec_envs(env_name, algo_args.seed, algo_args.num_processes,
