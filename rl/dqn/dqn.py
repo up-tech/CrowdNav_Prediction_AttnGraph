@@ -1,3 +1,4 @@
+import os
 import logging
 from os import write
 from re import S
@@ -5,6 +6,8 @@ import torch
 import copy
 import math
 import torch.nn as nn
+import pandas as pd
+from arguments import get_args
 import torch.optim as optim
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
@@ -23,6 +26,7 @@ class Explorer(object):
         self.target_model = None
         self.writer = SummaryWriter(log_dir="logs/sarl")
         self.count_num = 0
+        self.arg = get_args()
 
     def update_target_model(self, target_model):
         self.target_model = copy.deepcopy(target_model)
@@ -44,7 +48,6 @@ class Explorer(object):
         timeout_cases = []
         for i in range(k):
             ob = self.env.reset(phase)
-            print(f"run {k} episodes")
             done = False
             states = []
             actions = []
@@ -53,7 +56,7 @@ class Explorer(object):
                 action = self.robot.act(ob)
                 ob, reward, done, info = self.env.step(action)
                 states.append(self.robot.policy.last_state)
-                #print(len(states))
+                #print(states[len(states)-1])
                 actions.append(action)
                 rewards.append(reward)
 
@@ -85,6 +88,8 @@ class Explorer(object):
 
             cumulative_rewards.append(sum([pow(self.gamma, t * self.robot.time_step * self.robot.v_pref)
                                            * reward for t, reward in enumerate(rewards)]))
+        
+        self.count_num += 1
 
         success_rate = success / k
         collision_rate = collision / k
@@ -95,11 +100,19 @@ class Explorer(object):
         print(f"success rate {success_rate}")
         print(f"collision rate {collision_rate}")
         print(f"nav time {avg_nav_time}")
-        print(f"total reward {average(cumulative_rewards)}")
+        print(f"average reward {average(cumulative_rewards)}")
 
-        self.count_num += 1
-        self.writer.add_scalar('eprwmean', average(cumulative_rewards), self.count_num)
+        self.writer.add_scalar('eprewmean', average(cumulative_rewards), self.count_num)
+
         #self.writer.close()
+
+        if self.count_num % 20 == 0 and self.count_num > 1:
+            df = pd.DataFrame({'num_episodes': [self.count_num], 'eprewmean': average(cumulative_rewards), })
+            if os.path.exists(os.path.join(self.arg.sarl_output_dir, 'eprewmean.csv')) and self.count_num > 20:
+                df.to_csv(os.path.join(self.arg.sarl_output_dir, 'eprewmean.csv'), mode='a', header=False, index=False)
+            else:
+                df.to_csv(os.path.join(self.arg.sarl_output_dir, 'eprewmean.csv'), mode='w', header=True, index=False)
+
 
         logging.info('{:<5} {}has success rate: {:.2f}, collision rate: {:.2f}, nav time: {:.2f}, total reward: {:.4f}'.
                      format(phase.upper(), extra_info, success_rate, collision_rate, avg_nav_time,
@@ -136,16 +149,6 @@ class Explorer(object):
                     gamma_bar = pow(self.gamma, self.robot.time_step * self.robot.v_pref)
                     value = reward + gamma_bar * self.target_model(next_state.unsqueeze(0)).data.item()
             value = torch.Tensor([value]).to(self.device)
-
-            # # transform state of different human_num into fixed-size tensor
-            # if len(state.size()) == 1:
-            #     human_num = 1
-            #     feature_size = state.size()[0]
-            # else:
-            #     human_num, feature_size = state.size()
-            # if human_num != 5:
-            #     padding = torch.zeros((5 - human_num, feature_size))
-            #     state = torch.cat([state, padding])
             self.memory.push((state, value))
 
 
@@ -171,6 +174,7 @@ class Trainer(object):
         self.optimizer = None
         self.writer = SummaryWriter(log_dir="logs/sarl")
         self.count_num = 0
+        self.arg = get_args()
 
     def set_learning_rate(self, learning_rate):
         logging.info('Current learning rate: %f', learning_rate)
@@ -233,6 +237,13 @@ class Trainer(object):
         self.writer.add_scalar('average_loss', average_loss, self.count_num)
         #self.writer.close()
         logging.debug('Average loss : %.2E', average_loss)
+
+        if self.count_num % 20 == 0 and self.count_num > 1:
+            df = pd.DataFrame({'num_episodes': [self.count_num], 'loss/value_loss': average_loss})
+            if os.path.exists(os.path.join(self.arg.sarl_output_dir, 'loss.csv')) and self.count_num > 20:
+                df.to_csv(os.path.join(self.arg.sarl_output_dir, 'loss.csv'), mode='a', header=False, index=False)
+            else:
+                df.to_csv(os.path.join(self.arg.sarl_output_dir, 'loss.csv'), mode='w', header=True, index=False)
 
         return average_loss
 

@@ -11,6 +11,9 @@ def get_args():
 
     # the saving directory for train.py
     parser.add_argument(
+        '--output_dir', type=str, default='trained_models/test_model')
+    
+    parser.add_argument(
         '--plusplus_output_dir', type=str, default='trained_models/plusplus_model')
     
     parser.add_argument(
@@ -53,7 +56,7 @@ def get_args():
         default=False,
         help='disables CUDA training')
     parser.add_argument(
-        '--seed', type=int, default=425, help='random seed (default: 1)')
+        '--seed', type=int, default=0, help='random seed (default: 1)')
 
     parser.add_argument(
         '--num-processes',

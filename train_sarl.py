@@ -1,21 +1,18 @@
 import os
+import gym
 import shutil
 import time
-from collections import deque
-import numpy as np
 import torch
-import torch.nn as nn
+import numpy as np
 import pandas as pd
+import torch.nn as nn
+
+from collections import deque
 import matplotlib.pyplot as plt
-import gym
-
 from arguments import get_args
-from rl.networks.envs import make_vec_envs
-from rl.networks.model import Policy
-from rl.networks.storage import RolloutStorage
 
-from crowd_nav.configs.config_sarl import ConfigSARL
 from crowd_sim import *
+from crowd_nav.configs.config_sarl import ConfigSARL
 
 from rl.networks.sarl import SARL
 from rl.dqn.dqn import Trainer
@@ -47,11 +44,16 @@ def main():
         os.makedirs(output_dir)
     elif not algo_args.overwrite:
         raise ValueError('output_dir already exists!')
+    
     save_config_dir = os.path.join(output_dir, 'configs')
     if not os.path.exists(save_config_dir):
         os.makedirs(save_config_dir)
+
+    save_model_path = os.path.join(output_dir, 'checkpoints')
+    if not os.path.exists(save_model_path):
+        os.makedirs(save_model_path)
     
-    rl_weight_file = os.path.join(output_dir, 'rl_model.pth')
+    #rl_weight_file = os.path.join(output_dir, 'rl_model.pth')
 
     shutil.copy('arguments.py', output_dir)
     shutil.copy('crowd_nav/configs/config.py', save_config_dir)
@@ -74,28 +76,8 @@ def main():
     device = torch.device("cuda" if algo_args.cuda else "cpu")
     device = 'cpu'
 
-    if config.sim.render:
-        algo_args.num_processes = 1
-        algo_args.num_mini_batch = 1
-
-    # for visualization
-    if config.sim.render:
-        fig, ax = plt.subplots(figsize=(7, 7))
-        ax.set_xlim(-10, 10)
-        ax.set_ylim(-10, 10)
-        ax.set_xlabel('x(m)', fontsize=16)
-        ax.set_ylabel('y(m)', fontsize=16)
-        plt.ion()
-        plt.show()
-    else:
-        ax = None
-
     torch.set_num_threads(18)
 
-    # Create a wrapped, monitored VecEnv
-    # envs = make_vec_envs(env_name, algo_args.seed, algo_args.num_processes,
-    #                      algo_args.gamma, None, device, False, config=env_config, ax=ax, pretext_wrapper=config.env.use_wrapper)
-    
     policy = SARL()
     policy.configure(env_config) # set layer dims
     policy.set_device(device)
@@ -130,6 +112,7 @@ def main():
     explorer.update_target_model(model)
 
     episode = 0
+
     while episode < train_episodes:
         if episode < epsilon_decay:
             epislon = epsilon_start + (epsilon_end - epsilon_start) / epsilon_decay * episode
@@ -145,32 +128,7 @@ def main():
             print('update model')
         
         if episode != 0 and episode % checkpoint_interval == 0:
-            torch.save(model.state_dict(), rl_weight_file)
-
-        # if j % algo_args.log_interval == 0 and len(episode_rewards) > 1:
-        #     total_num_steps = (j + 1) * algo_args.num_processes * algo_args.num_steps
-        #     end = time.time()
-        #     print(
-        #         "Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward "
-        #         "{:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n"
-        #             .format(j, total_num_steps,
-        #                     int(total_num_steps / (end - start)),
-        #                     len(episode_rewards), np.mean(episode_rewards),
-        #                     np.median(episode_rewards), np.min(episode_rewards),
-        #                     np.max(episode_rewards), dist_entropy, value_loss,
-        #                     action_loss))
-
-        #     df = pd.DataFrame({'misc/nupdates': [j], 'misc/total_timesteps': [total_num_steps],
-        #                        'fps': int(total_num_steps / (end - start)), 'eprewmean': [np.mean(episode_rewards)],
-        #                        'loss/policy_entropy': dist_entropy, 'loss/policy_loss': action_loss,
-        #                        'loss/value_loss': value_loss})
-
-        #     if os.path.exists(os.path.join(output_dir, 'progress.csv')) and j > 20:
-        #         df.to_csv(os.path.join(output_dir, 'progress.csv'), mode='a', header=False, index=False)
-        #     else:
-        #         df.to_csv(os.path.join(output_dir, 'progress.csv'), mode='w', header=True, index=False)
-
-
+            torch.save(model.state_dict(), os.path.join(save_model_path, str(episode) + '.pth'))
 
 if __name__ == '__main__':
     main()

@@ -39,7 +39,7 @@ class ConfigSARL(object):
     training.batch_size = 100
     training.rl_learning_rate = 0.001
     training.train_batches = 100
-    training.train_episodes = 8500
+    training.train_episodes = 10000
     training.sample_episodes = 1
     training.target_update_interval = 50
     training.evaluation_interval = 1000
@@ -79,7 +79,7 @@ class ConfigSARL(object):
     sim = BaseConfig()
     sim.circle_radius = 6 * np.sqrt(2)
     sim.arena_size = 6
-    sim.human_num = 5
+    sim.human_num = 20
     # actual human num in each timestep, in [human_num-human_num_range, human_num+human_num_range]
     sim.human_num_range = 0
     sim.predict_steps = 5

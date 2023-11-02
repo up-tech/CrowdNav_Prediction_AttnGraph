@@ -1,30 +1,25 @@
+from gettext import install
 import os
-import shutil
-import time
-from collections import deque
-import numpy as np
-import torch
-import torch.nn as nn
-import pandas as pd
-import matplotlib.pyplot as plt
 import gym
+import time
+import torch
+import shutil
+import numpy as np
+import pandas as pd
+import torch.nn as nn
 
-from rl import ppo
-from rl.networks import network_utils
+from collections import deque
+import matplotlib.pyplot as plt
+
 from arguments import get_args
-from rl.networks.envs import make_vec_envs
-from rl.networks.model import Policy
-from rl.networks.storage import RolloutStorage
+from crowd_sim.envs.utils.info import *
 
 from crowd_nav.configs.config_sarl import ConfigSARL
 from crowd_sim import *
 
 from rl.networks.sarl import SARL
-from rl.dqn.dqn import Trainer
 from rl.dqn.dqn import Explorer
-from rl.networks.memory import ReplayMemory
 from crowd_sim.envs.utils.robot import Robot
-
 
 def main():
     algo_args = get_args()
@@ -46,6 +41,7 @@ def main():
 
     torch.manual_seed(algo_args.seed)
     torch.cuda.manual_seed_all(algo_args.seed)
+
     if algo_args.cuda:
         if algo_args.cuda_deterministic:
             # reproducible but slower
@@ -70,20 +66,54 @@ def main():
     policy.set_env(env)
     env.robot.set_policy(policy)
 
-    explorer = Explorer(env, env.robot, device, gamma=0.9)
+    #explorer = Explorer(env, env.robot, device, gamma=0.9)
 
     policy.set_phase('test')
     policy.set_device(device)
 
-    ob = env.reset('test')
-    done = False
-    last_pos = np.array(env.robot.get_position())
-    while not done:
-        action = env.robot.act(ob)
-        ob, _, done, info = env.step(action)
-        current_pos = np.array(env.robot.get_position())
-        last_pos = current_pos
-        env.render()
+    # success_times = []
+    # collision_times = []
+    # timeout_times = []
+
+    success = 0
+    collision = 0
+    timeout = 0
+
+    collision_cases = []
+    timeout_cases = []
+
+    ep_counter = 0
+
+    test_size = env_config.env.test_size
+
+    for k in range(test_size):
+        ep_counter += 1
+        ob = env.reset('test')
+        done = False
+        last_pos = np.array(env.robot.get_position())
+        while not done:
+            action = env.robot.act(ob)
+            ob, _, done, info = env.step(action)
+            current_pos = np.array(env.robot.get_position())
+            last_pos = current_pos
+            #env.render()
+        if isinstance(info, ReachGoal):
+            success += 1
+            print('Success')
+        elif isinstance(info, Collision):
+            collision += 1
+            collision_cases.append(ep_counter)
+            print('Collision')
+        elif isinstance(info, Timeout):
+            timeout += 1
+            timeout_cases.append(ep_counter)
+            print('Timeout')
+    
+    success_rate = success / test_size
+    collision_rate = collision / test_size
+    timeout_rate = timeout / test_size
+
+    print(f"success rate: {success_rate}, collision rate: {collision_rate}, timeout rate: {timeout_rate}")
 
 if __name__ == '__main__':
     main()

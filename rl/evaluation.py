@@ -81,7 +81,7 @@ def evaluate(actor_critic, eval_envs, num_processes, device, test_size, logging,
                 eval_envs.render()
 
             # Obser reward and next obs
-            obs, rew, done, infos = eval_envs.step(action)
+            obs, rew, done, infos = eval_envs.step(action)  #this part will add 1 more seed for random
 
             # record the info for calculating testing metrics
             rewards.append(rew)
